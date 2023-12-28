@@ -73,7 +73,7 @@ const AllPostScreen = () => {
   const isPostLiked = postId => likedPosts.includes(postId);
 
   const renderPost = ({item}) => {
-    const postDate = item.timestamp.toDate();
+    const postDate = item.timestamp ? item.timestamp.toDate() : null;
 
     return (
       <View style={styles.postContainer}>
@@ -95,7 +95,9 @@ const AllPostScreen = () => {
           <Text style={styles.postText}>{'@' + item.userId}</Text>
         </View>
         <View>
-          <Text style={styles.postDate}>{postDate.toLocaleString()} </Text>
+          {postDate && (
+            <Text style={styles.postDate}>{postDate.toLocaleString()} </Text>
+          )}
         </View>
       </View>
     );

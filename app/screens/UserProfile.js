@@ -1,13 +1,13 @@
-/* eslint-disable prettier/prettier */
 import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
   Image,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
-  Alert,
+  Modal,
+  TextInput,
+  Button,
 } from 'react-native';
 import {FirebaseAuth, FirebaseFireStore} from '../../firebaseConfig';
 import {
@@ -15,13 +15,14 @@ import {
   query,
   where,
   getDocs,
-  doc,
   updateDoc,
+  doc,
 } from 'firebase/firestore';
 
 const UserProfile = () => {
   const imgUrl = 'https://placekitten.com/640/360';
   const [userData, setUserData] = useState({
+    uid: '',
     name: '',
     email: '',
     age: '',
@@ -30,12 +31,9 @@ const UserProfile = () => {
     photoURL: imgUrl,
   });
 
-  const [editableFields, setEditableFields] = useState({
-    name: false,
-    age: false,
-    gender: false,
-    phone: false,
-  });
+  const [isEditModalVisible, setEditModalVisible] = useState(false);
+  const [editedField, setEditedField] = useState('');
+  const [editedValue, setEditedValue] = useState('');
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -47,6 +45,7 @@ const UserProfile = () => {
         if (!querySnapshot.empty) {
           const userDoc = querySnapshot.docs[0].data();
           setUserData({
+            uid: userDoc.uid,
             name: userDoc.name,
             email: userDoc.email,
             age: userDoc.age,
@@ -61,63 +60,71 @@ const UserProfile = () => {
     fetchUserData();
   }, []);
 
-  const handleEdit = field => {
-    setEditableFields({...editableFields, [field]: true});
+  const handleEditField = field => {
+    setEditedField(field);
+    setEditedValue(userData[field]); // Set the initial value to the current field value
+    setEditModalVisible(true);
   };
 
-  const handleSave = async field => {
+  const handleSaveField = async () => {
     try {
-      const userRef = doc(
-        FirebaseFireStore,
-        'users',
-        FirebaseAuth.currentUser.uid,
-      );
+      // Update the field in Firestore
+      const userRef = doc(FirebaseFireStore, 'users', userData.uid);
+      await updateDoc(userRef, {[editedField]: editedValue});
 
-      await updateDoc(userRef, {[field]: userData[field]});
+      // Update the local state
+      setUserData(prevData => ({...prevData, [editedField]: editedValue}));
 
-      setEditableFields({...editableFields, [field]: false});
-      Alert.alert('Success', `Your ${field} has been updated successfully!`);
+      // Close the modal
+      setEditModalVisible(false);
     } catch (error) {
-      console.error(`Error updating ${field}:`, error);
-      Alert.alert('Error', `Failed to update ${field}. Please try again.`);
+      console.error(`Error updating ${editedField}:`, error);
     }
   };
-
-  const renderEditableField = (field, label) => (
-    <View style={styles.editableFieldContainer}>
-      <Text style={styles.label}>{label}</Text>
-      {editableFields[field] ? (
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={userData[field]}
-            onChangeText={text => setUserData({...userData, [field]: text})}
-          />
-          <TouchableOpacity onPress={() => handleSave(field)}>
-            <Text style={styles.saveButton}>Save</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>{userData[field]}</Text>
-          <TouchableOpacity onPress={() => handleEdit(field)}>
-            <Text style={styles.editButton}>Edit</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
 
   return (
     <View style={styles.container}>
       {userData.photoURL && (
         <Image source={{uri: userData.photoURL}} style={styles.avatar} />
       )}
-      {renderEditableField('name', 'Name')}
+      <Text style={styles.name}>{userData.name || 'No name'}</Text>
       <Text style={styles.email}>{userData.email}</Text>
-      {renderEditableField('age', 'Age')}
-      {renderEditableField('gender', 'Gender')}
-      {renderEditableField('phone', 'Phone')}
+
+      <View style={styles.detailContainer}>
+        <Text style={styles.detail}>Age: {userData.age || 'N/A'}</Text>
+        <TouchableOpacity onPress={() => handleEditField('age')}>
+          <Text style={styles.editButton}>Edit</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.detailContainer}>
+        <Text style={styles.detail}>Gender: {userData.gender || 'N/A'}</Text>
+        <TouchableOpacity onPress={() => handleEditField('gender')}>
+          <Text style={styles.editButton}>Edit</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.detailContainer}>
+        <Text style={styles.detail}>Phone: {userData.phone || 'N/A'}</Text>
+        <TouchableOpacity onPress={() => handleEditField('phone')}>
+          <Text style={styles.editButton}>Edit</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Other details... */}
+
+      <Modal visible={isEditModalVisible} animationType="slide">
+        <View style={styles.modalContainer}>
+          <Text>Edit {editedField}</Text>
+          <TextInput
+            style={styles.modalInput}
+            value={editedValue}
+            onChangeText={setEditedValue}
+          />
+          <Button title="Save" onPress={handleSaveField} />
+          <Button title="Cancel" onPress={() => setEditModalVisible(false)} />
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -135,49 +142,39 @@ const styles = StyleSheet.create({
     borderRadius: 75,
     marginBottom: 20,
   },
+  name: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
   email: {
     fontSize: 16,
     color: 'gray',
-    marginBottom: 10,
+    marginBottom: 4,
   },
-  editableFieldContainer: {
-    marginBottom: 15,
-    width: '80%',
-  },
-  fieldContainer: {
+  detailContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 4,
   },
-  label: {
+  detail: {
     fontSize: 16,
-    marginBottom: 5,
-    fontWeight: 'bold',
-  },
-  fieldLabel: {
-    fontSize: 16,
-    marginRight: 10,
+    marginRight: 8,
   },
   editButton: {
     color: 'blue',
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  input: {
+  modalContainer: {
     flex: 1,
-    height: 40,
-    borderColor: 'gray',
-    borderWidth: 1,
-    borderRadius: 5,
-    marginRight: 10,
-    paddingLeft: 5,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  saveButton: {
-    color: 'green',
-    fontWeight: 'bold',
-    fontSize: 16,
+  modalInput: {
+    borderWidth: 1,
+    borderColor: 'gray',
+    padding: 8,
+    marginBottom: 8,
+    width: 200,
   },
 });
 
